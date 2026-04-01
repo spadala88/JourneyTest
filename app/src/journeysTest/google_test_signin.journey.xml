@@ -2,7 +2,7 @@
 <journey name="Emulator Basic Sanity Automation">
     <description xml:space="preserve">Basic Emulator Testing.</description>
     <actions xml:space="preserve">
-     <action>Click 'Home' button to go to launcher screen </action>
+     <action>Click 'Home' button to go to launcher screen</action>
         <action>Swipe up from the bottom of the home screen to open the app drawer.</action>
         <action>Open the Phone app and tap the Keypad.</action>
         <action>Type '123' number manually wait for number to appear in screen the tap the Call button to verify outgoing calls.</action>
