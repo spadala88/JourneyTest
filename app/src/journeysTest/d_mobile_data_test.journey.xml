@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<journey name="mobile_data_test">
+    <description>Mobile data test</description>
+    <actions>
+        <action>Click 'Home' button to go to launcher screen</action>
+        <action>Navigate to device settings screen.</action>
+        <action>Navigate to 'Wireless and networks' (or 'Network and internet' on newer APIs)</action>
+        <action>Tap the 'Internet' option. Verify that the Internet settings screen opens successfully.</action>
+        <action>Locate the 'Wi-Fi' toggle switch. Tap the toggle to switch it to the OFF position. Verify that the toggle is now in the OFF state.</action>
+        <action>Tap the 'Back' arrow at the top left of the screen to return to the main menu. Verify that the 'Wireless and networks (or 'Network and internet' on newer APIs)' screen is visible again.</action>
+        <action>Tap the 'SIMs' option. Verify that the SIM settings screen opens successfully.</action>
+        <action>Locate the 'Mobile data' toggle switch. Tap the toggle to switch it to the ON position. Verify that the toggle is now in the ON state.</action>
+        <action>Return to Chrome app  and wait for app to load successfully</action>
+        <action>Tap the Fourth shortcut icon located just below the search bar.</action>
+        <action>Verify that the webpage now loads successfully</action>
+    </actions>
+</journey>

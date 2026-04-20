@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<journey name="Wifi Test">
+    <description>Wifi Test</description>
+    <actions>
+        <action>Click 'Home' button to go to launcher screen</action>
+        <action>Navigate to device settings screen.</action>
+        <action>Navigate to 'Wireless and networks' (or 'Network and internet' on newer APIs)</action>
+        <action>Tap 'SIMs' (which may show a carrier name like T-Mobile beneath it). Verify that the SIM settings screen opens successfully.</action>
+        <action>Locate the 'Mobile data' toggle switch. Tap the toggle to switch it to the OFF position. Verify that the toggle is now in the OFF state.</action>
+        <action>Return to Chrome app  and wait for app to load successfully</action>
+        <action>Tap the Third shortcut icon located just below the search bar.</action>
+        <action>Verify that the webpage now loads successfully</action>
+        <action>Click 'Home' button to go to launcher screen</action>
+    </actions>
+</journey>

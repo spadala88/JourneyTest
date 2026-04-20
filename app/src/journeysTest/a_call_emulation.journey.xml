@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<journey name="Call emulation">
+    <description xml:space="preserve">Call Emulation</description>
+    <actions>
+        <action>Click 'Home' button to go to launcher screen</action>
+        <action>Swipe up from the center bottom edge of the home screen to fully open the app drawer.</action>
+        <action>Open the Phone app and tap the Keypad.</action>
+        <action>Type '123' number manually wait for number to appear in screen the tap the Call button to verify outgoing calls.</action>
+        <action>Click 'End' red color button to end call , verify that the call ended without any errors</action>
+    </actions>
+</journey>

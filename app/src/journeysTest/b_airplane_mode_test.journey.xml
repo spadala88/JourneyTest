@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<journey name="Airplane mode test">
+    <description xml:space="preserve">Airplane modetest</description>
+    <actions>
+        <action>Verify that the status bar shows icons indicating active network data connectivity.</action>
+        <action>Launch the Chrome app.</action>
+        <action>Wait for the app to load. If the screen displays 'Make Chrome your own', tap the 'Use without an account' button located at the bottom of the screen. If this screen is not visible, proceed to the next step.</action>
+        <action>Wait until the Chrome browser is fully rendered, then verify it displays the New Tab page or the main Google search page.</action>
+        <action>Tap the First shortcut icon located just below the search bar.</action>
+        <action>Wait for the page loading indicator to finish and verify the webpage content is fully visible</action>
+        <action>Open the device 'Settings' application from the app drawer.</action>
+        <action>Navigate to 'Wireless and networks' (or 'Network and internet' on newer APIs).Tap the words 'Airplane mode' to toggle the setting to ON.Verify that the airplane icon appears in the status bar.</action>
+        <action>Return to Chrome app  and wait for app to load successfully</action>
+        <action>Tap the second website shortcut icon visible under the search bar on the Chrome homepage.</action>
+        <action>Verify that the webpage fails to load</action>-->
+        <action>Navigate to 'Wireless and networks' (or 'Network and internet' on newer APIs).Tap the words 'Airplane mode' to toggle the setting to OFF. Verify the switch is now in the OFF position.</action>
+    </actions>
+</journey>
