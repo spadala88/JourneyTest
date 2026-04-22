@@ -34,6 +34,10 @@ EOT
 
 # Helper function to run a test and log the result
 run_journey() {
+
+  # ONLY this specific line gets the formatting
+  echo "${BOLD_GREEN}Running first call emulation...${RESET}"
+  JOURNEYS_FILTER=a_call_emulation.journey.xml ./gradlew :app:testJourneysTestDefaultDebugTestSuite
     local test_name=$1
     local filter_file=$2
 
