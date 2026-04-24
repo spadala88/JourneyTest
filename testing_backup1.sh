@@ -197,11 +197,15 @@ try:
     # Focus click
     print("Sending focus click...")
     pyautogui.click()
-    time.sleep(0.2)
-    print("Sending deliberate Android tap...")
-    # 2. Simulate a human tap (ACTION_DOWN -> wait 100ms -> ACTION_UP)
+    time.sleep(0.3)
+
+    # The Wiggle Click bypass
+    print("Sending 'wiggle' click...")
     pyautogui.mouseDown()
-    time.sleep(0.1)
+    time.sleep(0.05)
+    pyautogui.moveRel(1, 1)
+    time.sleep(0.05)
+    pyautogui.moveRel(-1, -1)
     pyautogui.mouseUp()
 
     print("Clicks complete!")
@@ -214,191 +218,14 @@ EOF
 }
 
 
-# Helper function to visually locate and click any UI text using EasyOCR (Cross-Platform)
-click_text_element() {
-    local TARGET_TEXT="$1"
 
-    # Safety check to ensure target text was provided
-    if [ -z "$TARGET_TEXT" ]; then
-        echo "Error: Please provide target text to search for."
-        echo "Usage: click_text_element \"Settings\""
-        return 1
-    fi
-
-    # STEALTH FIX: Removed the exact target text from the terminal output
-    echo -e "\033[1;33mRunning Strict Text Click Action (Target hidden to prevent self-reading)...\033[0m"
-
-    # Pass the TARGET_TEXT variable to Python as an argument
-    python3 - "$TARGET_TEXT" <<'EOF'
-import sys
-import time
-import os
-import tempfile
-import platform
-
-try:
-    import pyautogui
-    import easyocr
-except ImportError as e:
-    print(f"Import Error: {e}. Please ensure pyautogui and easyocr are installed.")
-    sys.exit(1)
-
-target_text = sys.argv[1]
-
-print(">>> Switch to the Emulator Extended Controls NOW! You have 3 seconds... <<<")
-time.sleep(3)
-
-# STEALTH FIX: Removed target text from this print statement
-print("Taking screenshot...")
-
-try:
-    # 1. Use an OS-Agnostic Temporary Directory
-    temp_dir = tempfile.gettempdir()
-    screenshot_path = os.path.join(temp_dir, "temp_screen_ocr.png")
-
-    is_mac = platform.system() == 'Darwin'
-
-    # 2. Hybrid Screenshot Logic to bypass macOS strict permission inheritance
-    if is_mac:
-        os.system(f"screencapture -x {screenshot_path}")
-    else:
-        pyautogui.screenshot(screenshot_path)
-
-    if not os.path.exists(screenshot_path):
-        print(f"❌ FAILURE: The system could not save the screenshot to {screenshot_path}")
-        sys.exit(1)
-
-    # Now that the screenshot is taken, it is safe to print what we are looking for!
-    print(f"Searching screenshot for '{target_text}'...")
-
-    # 3. Initialize EasyOCR
-    reader = easyocr.Reader(['en'], gpu=False, verbose=False)
-    results = reader.readtext(screenshot_path)
-
-    found_bbox = None
-    found_text = None
-    found_prob = 0.0
-
-    # 4. Search the AI's results
-    for (bbox, text, prob) in results:
-        if target_text.lower() in text.lower():
-            found_bbox = bbox
-            found_text = text
-            found_prob = prob
-            break
-
-    # Clean up the temporary screenshot
-    if os.path.exists(screenshot_path):
-        os.remove(screenshot_path)
-
-    # 5. Handle Failure
-    if found_bbox is None:
-        print(f"❌ FAILURE: Could not find text matching '{target_text}' on screen.")
-        sys.exit(1)
-
-    print(f"✅ SUCCESS: Found '{found_text}' with {int(found_prob * 100)}% confidence!")
-
-    # 6. Calculate Center Coordinates from the Bounding Box
-    raw_x = int((found_bbox[0][0] + found_bbox[2][0]) / 2)
-    raw_y = int((found_bbox[0][1] + found_bbox[2][1]) / 2)
-
-    # 7. Dynamic OS Resolution Scaling (Retina Math)
-    divisor = 2 if is_mac else 1
-
-    click_x = int(raw_x / divisor)
-    click_y = int(raw_y / divisor)
-
-    print(f"Moving mouse to X={click_x}, Y={click_y}...")
-    pyautogui.moveTo(click_x, click_y, duration=0.5)
-    time.sleep(0.5)
-
-    print("Sending focus click...")
-    pyautogui.click()
-    time.sleep(0.3)
-
-    print("Sending 'wiggle' click...")
-    pyautogui.mouseDown()
-    time.sleep(0.05)
-    pyautogui.moveRel(1, 1)
-    time.sleep(0.05)
-    pyautogui.moveRel(-1, -1)
-    pyautogui.mouseUp()
-
-    print("Clicks complete!")
-
-except Exception as e:
-    print(f"❌ ERROR: Something crashed: {e}")
-EOF
-}
-
-# Helper function to launch an Android Emulator silently
-launch_emulator() {
-    local AVD_NAME="$1"
-
-    # Safety check
-    if [ -z "$AVD_NAME" ]; then
-        echo "❌ Error: Please provide the exact name of the emulator to launch."
-        echo "To see a list of your available emulators, run: emulator -list-avds"
-        return 1
-    fi
-
-    echo -e "\033[1;34mBooting up Android Emulator: '${AVD_NAME}'...\033[0m"
-
-    # Launch in background AND send all logs to the void
-    emulator -avd "$AVD_NAME" -no-boot-anim > emulator_debug.log 2>&1 &
-
-    # Emulators take time to boot. Give it a generous buffer before the script continues.
-    echo "Waiting 5 seconds for the Android OS to fully boot..."
-    sleep 5
-}
-
-# Helper function to verify if a specific app is currently on the screen
-verify_snapshot_state() {
-    local EXPECTED_PACKAGE="$1"
-
-    echo "Checking if snapshot loaded correctly (Looking for: $EXPECTED_PACKAGE)..."
-
-    # Use ADB to ask Android what window is currently in focus
-    # Note: Depending on your OS setup, you may need to specify the full path to adb
-    local CURRENT_FOCUS=$(adb shell dumpsys window | grep mCurrentFocus)
-
-    # Check if the expected package name is in the output
-    if [[ "$CURRENT_FOCUS" == *"$EXPECTED_PACKAGE"* ]]; then
-        echo -e "\033[1;32m✅ SUCCESS: Snapshot verified. $EXPECTED_PACKAGE is on screen.\033[0m"
-        return 0 # Success
-    else
-        echo -e "\033[1;31m❌ FAILURE: Snapshot mismatch or cold boot. Expected $EXPECTED_PACKAGE.\033[0m"
-        echo "Current focus is: $CURRENT_FOCUS"
-        return 1 # Failure
-    fi
-}
 
 # --- TEST EXECUTION ORDER ---
-# Click the Settings menu
-click_ui_element "youtube_app.png"
-sleep 1
+
+# 1. Open the controls
 #open_extended_controls
 click_ui_element "three_dots.png"
 # Wait a moment for the new menu to load
-sleep 1
-# Click the Settings menu
-click_text_element "Snapshots"
-sleep 1
-# Click the Settings menu
-click_text_element "TAKE SNAPSHOT"
-sleep 1
-#open_extended_controls
-click_ui_element "close_emu.png"
-sleep 10
-# Launch in background and save logs to a file
-launch_emulator "Pixel_7_Pro"
-sleep 5
-verify_snapshot_state "com.google.android.youtube"
-# Run the tests using the helper function
-run_journey "Call Emulation" "a_call_emulation.journey.xml"
-run_journey "Airplane Mode" "b_airplane_mode_test.journey.xml"
-run_journey "WiFi Test" "c_wifi_test.journey.xml"
-run_journey "Mobile Data Test" "d_mobile_data_test.journey.xml"
 
 #sleep 1
 # Click the snapshot menu
