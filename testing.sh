@@ -139,9 +139,6 @@ run_journey() {
     fi
 }
 
-
-
-
 # Helper function to visually locate and click any UI element
 click_ui_element() {
     local IMAGE_NAME="$1"
@@ -212,7 +209,6 @@ except Exception as e:
     print(f"❌ ERROR: Something crashed: {e}")
 EOF
 }
-
 
 # Helper function to visually locate and click any UI text using EasyOCR (Cross-Platform)
 click_text_element() {
@@ -312,19 +308,18 @@ try:
     pyautogui.moveTo(click_x, click_y, duration=0.5)
     time.sleep(0.5)
 
+    # Focus click
     print("Sending focus click...")
     pyautogui.click()
-    time.sleep(0.3)
-
-    print("Sending 'wiggle' click...")
+    time.sleep(0.2)
+    print("Sending deliberate Android tap...")
+    # 2. Simulate a human tap (ACTION_DOWN -> wait 100ms -> ACTION_UP)
     pyautogui.mouseDown()
-    time.sleep(0.05)
-    pyautogui.moveRel(1, 1)
-    time.sleep(0.05)
-    pyautogui.moveRel(-1, -1)
+    time.sleep(0.1)
     pyautogui.mouseUp()
 
     print("Clicks complete!")
+
 
 except Exception as e:
     print(f"❌ ERROR: Something crashed: {e}")
@@ -373,9 +368,255 @@ verify_snapshot_state() {
     fi
 }
 
+
+
+
+
+download_system_image() {
+    # 1. Authenticate
+    echo "Running uplink-helper login..."
+    uplink-helper login || return 1
+
+    # 2. Define the exact Staging URL based on the filename the CLI exposed
+    local ZIP_NAME="arm64-v8a-playstore-ps16k-CANARY_r11.zip"
+    local FULL_URL="http://adt-proxy.uplink2.goog:999/rapid/h5ub4nb5-zzka-r44z-w36z-fukmdt4c3wox/android/repository/sys-img/google_apis_playstore/${ZIP_NAME}"
+
+    # Adjust this to where your SDK actually lives
+    local SDK_PATH="$HOME/Library/Android/sdk"
+    local DEST_DIR="$SDK_PATH/system-images/android-CANARY/google_apis_playstore_ps16k/arm64-v8a"
+
+    echo -e "${BOLD_BLUE}Bypassing CLI and downloading directly from staging...${RESET}"
+
+    # --- ADDED: Print the exact URL being used ---
+    echo -e "${BOLD_GREEN}Target Download URL: ${FULL_URL}${RESET}"
+
+    # 3. Create the directory structure manually
+    mkdir -p "$DEST_DIR"
+
+    # 4. Download directly via curl
+    curl -L -o "./$ZIP_NAME" "$FULL_URL"
+
+    if [ $? -ne 0 ]; then
+        echo -e "${BOLD_RED}❌ FAILURE: Direct download failed.${RESET}"
+        return 1
+    fi
+
+    # 5. Extract into the SDK folder
+    echo "Extracting system image to SDK folder..."
+    unzip -q "./$ZIP_NAME" -d "$DEST_DIR"
+
+    # 6. Cleanup
+    rm "./$ZIP_NAME"
+    echo -e "${BOLD_GREEN}✅ SUCCESS: System image downloaded and extracted successfully.${RESET}"
+}
+
+download_system_image_android() {
+    local API_LEVEL="$1"
+    local SYS_IMG_TAG="$2"
+    local ABI="$3"
+
+    # 1. Safety check
+    if [ -z "$API_LEVEL" ] || [ -z "$SYS_IMG_TAG" ] || [ -z "$ABI" ]; then
+        echo -e "${BOLD_RED}❌ Error: Missing configuration parameters.${RESET}"
+        return 1
+    fi
+
+    local PACKAGE_PATH="system-images;android-${API_LEVEL};${SYS_IMG_TAG};${ABI}"
+    local ANDROID_CMD="android"
+
+    echo -e "${BOLD_BLUE}Preparing to download: ${PACKAGE_PATH}...${RESET}"
+
+    if ! command -v "$ANDROID_CMD" &> /dev/null; then
+        echo -e "${BOLD_RED}❌ Error: Could not find 'android' cli in the system PATH.${RESET}"
+        return 1
+    fi
+
+    # 2. NUKE THE CACHE
+    echo "Clearing global SDK cache..."
+    rm -rf ~/.android/cache
+    rm -rf ./.temp
+
+    # 3. Authenticate
+    echo "Running uplink-helper login..."
+    uplink-helper login
+    if [ $? -ne 0 ]; then
+        echo -e "${BOLD_RED}❌ FAILURE: uplink-helper login failed.${RESET}"
+        return 1
+    fi
+
+    # 4. Target the Staging XML directly (Without forcing JVM proxy tunnels)
+    echo "Pointing CLI to staging manifests..."
+
+    local STAGING_URL="http://adt-proxy.uplink2.goog:999/rapid/h5ub4nb5-zzka-r44z-w36z-fukmdt4c3wox/android/repository/"
+
+    export SDK_TEST_BASE_URL="$STAGING_URL"
+    # Removed the proxyHost flags to prevent the SSL crash, kept the custom.url flag
+    export _JAVA_OPTIONS="-DSDK_TEST_BASE_URL=$STAGING_URL -Dandroid.sdk.custom.url=${STAGING_URL}sys-img2-1.xml"
+
+    # 5. Execute
+    echo "Downloading system image..."
+    yes | "$ANDROID_CMD" sdk install --canary "$PACKAGE_PATH"
+
+    if [ $? -eq 0 ]; then
+        echo -e "${BOLD_GREEN}✅ SUCCESS: System image downloaded successfully.${RESET}"
+    else
+        echo -e "${BOLD_RED}❌ FAILURE: Failed to download system image.${RESET}"
+        return 1
+    fi
+}
+
+download_system_image_sdkmanager() {
+    local API_LEVEL="$1"
+    local SYS_IMG_TAG="$2"
+    local ABI="$3"
+
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Executing download_system_image: API=$API_LEVEL, TAG=$SYS_IMG_TAG, ABI=$ABI" >> "$LOG_FILE"
+
+    # 1. Safety check
+    if [ -z "$API_LEVEL" ] || [ -z "$SYS_IMG_TAG" ] || [ -z "$ABI" ]; then
+        echo -e "${BOLD_RED}❌ Error: Missing configuration parameters.${RESET}"
+        return 1
+    fi
+
+    local PACKAGE_PATH="system-images;android-${API_LEVEL};${SYS_IMG_TAG};${ABI}"
+    local SDKMANAGER_CMD="./cmdline-tools/latest/bin/sdkmanager"
+
+    echo -e "${BOLD_BLUE}Preparing to download: ${PACKAGE_PATH}...${RESET}"
+
+    if [ ! -f "$SDKMANAGER_CMD" ]; then
+        echo -e "${BOLD_RED}❌ Error: Could not find local sdkmanager.${RESET}"
+        return 1
+    fi
+
+    # 2. Clean up the temp folder just in case the previous script runs left garbage behind
+    echo "Clearing temporary cache..."
+    rm -rf ./.temp
+
+    # 3. Accept licenses silently so it doesn't prompt you
+    echo "Accepting Android SDK licenses..."
+    yes | "$SDKMANAGER_CMD" --licenses > /dev/null 2>&1
+
+    # 4. Run EXACTLY the command from your screenshot (No extra flags, no pipes)
+    echo "Downloading system image..."
+    "$SDKMANAGER_CMD" "$PACKAGE_PATH"
+
+    if [ $? -eq 0 ]; then
+        echo -e "${BOLD_GREEN}✅ SUCCESS: System image downloaded successfully.${RESET}"
+    else
+        echo -e "${BOLD_RED}❌ FAILURE: Failed to download system image.${RESET}"
+        return 1
+    fi
+}
+
+# Helper function to create an AVD using precise system image
+create_avd() {
+    local AVD_NAME="$1"
+    local DEVICE_PROFILE="$2"
+    local API_LEVEL="$3"
+    local SYS_IMG_TAG="$4"
+    local ABI="$5"
+
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Executing create_avd: NAME=$AVD_NAME, DEVICE=$DEVICE_PROFILE, API=$API_LEVEL, TAG=$SYS_IMG_TAG, ABI=$ABI"
+
+    # 1. Safety check
+    if [ -z "$AVD_NAME" ] || [ -z "$DEVICE_PROFILE" ] || [ -z "$API_LEVEL" ] || [ -z "$SYS_IMG_TAG" ] || [ -z "$ABI" ]; then
+        echo -e "${BOLD_RED}❌ Error: Missing configuration parameters.${RESET}"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Missing configuration parameters."
+        return 1
+    fi
+
+    # 2. Agentic Architecture Auto-Correction for Apple Silicon
+    if [ "$(uname)" == "Darwin" ] && [ "$(uname -m)" == "arm64" ]; then
+        if [ "$ABI" == "x86_64" ]; then
+            echo -e "${BOLD_BLUE}⚠️ Apple Silicon detected! Auto-correcting ABI from x86_64 to arm64-v8a...${RESET}"
+            echo "$(date '+%Y-%m-%d %H:%M:%S') [WARN] Apple Silicon detected! Auto-correcting ABI from x86_64 to arm64-v8a."
+            ABI="arm64-v8a"
+        fi
+    fi
+
+    # 3. Set strict local paths and environment variables
+    local SDK_ROOT="$(pwd)"
+    export ANDROID_SDK_ROOT="$SDK_ROOT"
+
+    local SDKMANAGER_CMD="./cmdline-tools/latest/bin/sdkmanager"
+    local AVDMANAGER_CMD="./cmdline-tools/latest/bin/avdmanager"
+
+    if [ ! -f "$AVDMANAGER_CMD" ] || [ ! -f "$SDKMANAGER_CMD" ]; then
+        echo -e "${BOLD_RED}❌ ERROR: Command line tools missing at project root.${RESET}"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Command line tools missing at project root."
+        return 1
+    fi
+
+    echo -e "${BOLD_BLUE}Creating Android Virtual Device: '${AVD_NAME}' (API: ${API_LEVEL})...${RESET}"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Creating Android Virtual Device: $AVD_NAME"
+
+    local PLATFORM_PATH="platforms;android-${API_LEVEL}"
+    local PACKAGE_PATH="system-images;android-${API_LEVEL};${SYS_IMG_TAG};${ABI}"
+
+    # FIX: Accept licenses here as well just in case this function is run independently
+    echo "Accepting Android SDK licenses for AVD creation..."
+    yes | "$SDKMANAGER_CMD" --licenses --sdk_root="$SDK_ROOT" > /dev/null 2>&1
+
+    echo "Ensuring required SDK platform and system image are installed using root tools..."
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Executing sdkmanager to verify platform and image."
+
+    # 4. Execute root sdkmanager without 'yes |' stream piping
+    "$SDKMANAGER_CMD" --sdk_root="$SDK_ROOT" --channel=3 "$PLATFORM_PATH" "$PACKAGE_PATH" > /dev/null 2>&1
+
+    echo "Building the emulator..."
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Building the AVD via avdmanager..."
+
+    # 5. Build the AVD using root avdmanager (removed 'echo no |' to prevent piping crashes)
+    "$AVDMANAGER_CMD" create avd -n "$AVD_NAME" -k "$PACKAGE_PATH" -d "$DEVICE_PROFILE" --force
+
+    if [ $? -eq 0 ]; then
+        echo -e "${BOLD_GREEN}✅ SUCCESS: AVD created successfully with $PACKAGE_PATH.${RESET}"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [SUCCESS] AVD created successfully."
+    else
+        echo -e "${BOLD_RED}❌ FAILURE: Failed to create AVD via avdmanager.${RESET}"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Failed to create AVD via avdmanager."
+        return 1
+    fi
+}
+
+# Helper function to authenticate and configure staging SDK URLs
+setup_staging_env() {
+    echo -e "${BOLD_BLUE}Configuring internal staging environment URLs...${RESET}"
+
+    # 1. Authenticate the proxy connection
+    echo "Running uplink-helper login (This may require manual interaction)..."
+    uplink-helper login
+
+    # Check if the login was successful
+    if [ $? -ne 0 ]; then
+        echo -e "${BOLD_RED}❌ FAILURE: uplink-helper login failed. Cannot access staging repository.${RESET}"
+        return 1
+    fi
+
+    # 2. Export the staging URL variable
+    # By exporting this, sdkmanager and avdmanager will automatically use this URL instead of the public one
+    export SDK_TEST_BASE_URL="http://adt-proxy.uplink2.goog:999/rapid/h5ub4nb5-zzka-r44z-w36z-fukmdt4c3wox/android/repository/"
+
+    echo -e "${BOLD_GREEN}✅ SUCCESS: SDK_TEST_BASE_URL exported successfully.${RESET}"
+}
+
 # --- TEST EXECUTION ORDER ---
 # Click the Settings menu
-click_ui_element "youtube_app.png"
+#setup_staging_env
+
+# download the  system image before creating the AVD:
+#download_system_image_sdkmanager "CANARY" "google_apis_playstore_ps16k" "arm64-v8a"
+
+# Create the emulator using an image we know is already installed and valid
+create_avd "Pixel_7_Pro_API_36" "pixel_7_pro" "CANARY" "google_apis_playstore_ps16k" "arm64-v8a"
+
+# Launch in background and save logs to a file
+launch_emulator "Pixel_7_Pro_API_36"
+
+sleep 30
+
+# Click the Settings menu
+click_text_element "YouTube"
 sleep 1
 #open_extended_controls
 click_ui_element "three_dots.png"
@@ -391,28 +632,14 @@ sleep 1
 click_ui_element "close_emu.png"
 sleep 10
 # Launch in background and save logs to a file
-launch_emulator "Pixel_7_Pro"
+launch_emulator "Pixel_7_Pro_API_36"
 sleep 5
 verify_snapshot_state "com.google.android.youtube"
 # Run the tests using the helper function
 run_journey "Call Emulation" "a_call_emulation.journey.xml"
-run_journey "Airplane Mode" "b_airplane_mode_test.journey.xml"
-run_journey "WiFi Test" "c_wifi_test.journey.xml"
-run_journey "Mobile Data Test" "d_mobile_data_test.journey.xml"
-
-#sleep 1
-# Click the snapshot menu
-#click_ui_element "snapshot.png"
-
-#sleep 1
-# Click the snapshot menu
-#click_ui_element "youtube_app.png"
-
-#sleep 1
-# Click the snapshot menu
-#click_ui_element "take_snapshot.png"
-
-
+#run_journey "Airplane Mode" "b_airplane_mode_test.journey.xml"
+#run_journey "WiFi Test" "c_wifi_test.journey.xml"
+#run_journey "Mobile Data Test" "d_mobile_data_test.journey.xml"
 
 #sleep 1
 # Click the snapshot menu
